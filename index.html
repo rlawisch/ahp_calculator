@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="favicon.ico">
+<title>AHP Calculator</title>
+
+<style>
+
+:root{
+    --bg:#0f172a;
+    --panel:#111827;
+    --panel2:#1e293b;
+    --border:#334155;
+    --text:#e5e7eb;
+    --muted:#94a3b8;
+    --accent:#3b82f6;
+    --good:#10b981;
+    --bad:#ef4444;
+}
+
+*{
+    box-sizing:border-box;
+}
+
+body{
+    margin:0;
+    padding:24px;
+    background:var(--bg);
+    color:var(--text);
+    font-family:Arial, Helvetica, sans-serif;
+}
+
+h1,h2,h3{
+    margin-top:0;
+}
+
+.container{
+    display:flex;
+    flex-direction:column;
+    gap:24px;
+}
+
+.top-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:24px;
+}
+
+.card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:16px;
+    overflow-x:auto;
+}
+
+table{
+    border-collapse:collapse;
+    width:100%;
+    min-width:600px;
+}
+
+th,td{
+    border:1px solid var(--border);
+    padding:8px;
+    text-align:center;
+}
+
+th{
+    background:var(--panel2);
+}
+
+input,select,button{
+    background:#0b1220;
+    color:var(--text);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:6px 8px;
+}
+
+input[type="text"],
+input[type="number"]{
+    width:100%;
+}
+
+button{
+    cursor:pointer;
+}
+
+button:hover{
+    background:var(--accent);
+}
+
+.controls{
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+}
+
+.formula{
+    background:#020617;
+    padding:12px;
+    border-radius:8px;
+    font-family:monospace;
+    line-height:1.8;
+}
+
+.result-box{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:16px;
+}
+
+.metric{
+    background:var(--panel2);
+    padding:16px;
+    border-radius:10px;
+    border:1px solid var(--border);
+}
+
+.metric .value{
+    font-size:1.5rem;
+    font-weight:bold;
+}
+
+.good{
+    color:var(--good);
+    font-weight:bold;
+}
+
+.bad{
+    color:var(--bad);
+    font-weight:bold;
+}
+
+.small{
+    font-size:.9rem;
+    color:var(--muted);
+}
+
+@media(max-width:1200px){
+
+    .top-grid{
+        grid-template-columns:1fr;
+    }
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Analytic Hierarchy Process (AHP) Calculator</h1>
+
+<div class="controls">
+
+    <label>
+        Alternatives:
+        <input type="number" id="altCount" min="2" max="10" value="3">
+    </label>
+
+    <label>
+        Criteria:
+        <input type="number" id="critCount" min="2" max="10" value="3">
+    </label>
+
+    <button onclick="generateTables()">Generate Tables</button>
+
+    <button onclick="calculateAHP()">Calculate AHP</button>
+
+</div>
+
+<div class="top-grid">
+
+    <div class="card">
+
+        <h2>Alternatives × Criteria</h2>
+
+        <div id="dataTableContainer"></div>
+
+    </div>
+
+    <div class="card">
+
+        <h2>Criteria Pairwise Comparison (Saaty Scale)</h2>
+
+        <div id="pairwiseContainer"></div>
+
+    </div>
+
+</div>
+
+<div class="card">
+
+    <h2>Criteria Matrix Normalization</h2>
+
+    <div id="normalizationSection"></div>
+
+</div>
+
+<div class="card">
+
+    <h2>Priority Vector</h2>
+
+    <div id="prioritySection"></div>
+
+</div>
+
+<div class="card">
+
+    <h2>Consistency Calculations</h2>
+
+    <div id="consistencySection"></div>
+
+</div>
+
+<div class="card">
+
+    <h2>Alternative Ranking</h2>
+
+    <div id="rankingSection"></div>
+
+</div>
+
+</div>
+
+<script>
+
+const STORAGE_KEY = "ahp_calculator_state";
+
+const RI_TABLE = {
+    1:0.00,
+    2:0.00,
+    3:0.58,
+    4:0.90,
+    5:1.12,
+    6:1.24,
+    7:1.32,
+    8:1.41,
+    9:1.45,
+    10:1.49
+};
+
+function generateTables(){
+
+    const altCount =
+        parseInt(document.getElementById("altCount").value);
+
+    const critCount =
+        parseInt(document.getElementById("critCount").value);
+
+    generateDataTable(altCount, critCount);
+
+    generatePairwiseTable(critCount);
+
+    clearResults();
+
+    saveState();
+}
+
+function generateDataTable(altCount, critCount){
+
+    let html = `<table>`;
+
+    html += `<tr><th>Alternative</th>`;
+
+    for(let c=0;c<critCount;c++){
+
+        html += `
+            <th>
+
+                <div style="display:flex;flex-direction:column;gap:6px;">
+
+                    <input
+                        type="text"
+                        id="critName${c}"
+                        value="Criterion ${c+1}">
+
+                    <select id="critMode${c}">
+                        <option value="benefit">
+                            More is better
+                        </option>
+
+                        <option value="cost">
+                            Less is better
+                        </option>
+                    </select>
+
+                </div>
+
+            </th>
+        `;
+    }
+
+    html += `</tr>`;
+
+    for(let r=0;r<altCount;r++){
+
+        html += `<tr>`;
+
+        html += `
+            <td>
+                <input
+                    type="text"
+                    id="altName${r}"
+                    value="Alternative ${r+1}">
+            </td>
+        `;
+
+        for(let c=0;c<critCount;c++){
+
+            html += `
+                <td>
+                    <input
+                        type="number"
+                        step="0.01"
+                        min="0.0001"
+                        id="val_${r}_${c}"
+                        value="1">
+                </td>
+            `;
+        }
+
+        html += `</tr>`;
+    }
+
+    html += `</table>`;
+
+    document.getElementById("dataTableContainer").innerHTML = html;
+}
+
+function generatePairwiseTable(critCount){
+
+    let html = `<table>`;
+
+    html += `<tr><th></th>`;
+
+    for(let i=0;i<critCount;i++){
+
+        const critName =
+            document.getElementById(`critName${i}`)?.value ||
+            `Criterion ${i+1}`;
+
+        html += `<th id="pair_col_${i}">${critName}</th>`;
+    }
+
+    html += `</tr>`;
+
+    for(let i=0;i<critCount;i++){
+
+        const rowName =
+            document.getElementById(`critName${i}`)?.value ||
+            `Criterion ${i+1}`;
+
+        html += `<tr>`;
+
+        html += `
+            <th id="pair_row_${i}">
+                ${rowName}
+            </th>
+        `;
+
+        for(let j=0;j<critCount;j++){
+
+            if(i === j){
+
+                html += `
+                    <td>
+                        <span
+                            class="readonly-cell"
+                            id="pw_${i}_${j}">
+                            1
+                        </span>
+                    </td>
+                `;
+
+            }else if(i < j){
+
+                html += `
+                    <td>
+                        <select
+                            id="pw_${i}_${j}"
+                            onchange="updateReciprocal(${i},${j})">
+
+                            ${generateSaatyOptions()}
+
+                        </select>
+                    </td>
+                `;
+
+            }else{
+
+                html += `
+                    <td>
+                        <span
+                            class="readonly-cell"
+                            id="pw_${i}_${j}">
+                            1
+                        </span>
+                    </td>
+                `;
+            }
+        }
+
+        html += `</tr>`;
+    }
+
+    html += `</table>`;
+
+    document.getElementById("pairwiseContainer").innerHTML = html;
+
+    for(let i=0;i<critCount;i++){
+        for(let j=i+1;j<critCount;j++){
+            updateReciprocal(i,j);
+        }
+    }
+
+    bindCriteriaNameSync();
+}
+
+function generateSaatyOptions(){
+
+    const vals = [
+        "1/9","1/8","1/7","1/6","1/5","1/4","1/3","1/2",
+        1,
+        2,3,4,5,6,7,8,9
+    ];
+
+    return vals.map(v=>`<option value="${v}">${v}</option>`).join("");
+}
+
+function updateReciprocal(i,j){
+
+    const upper =
+        document.getElementById(`pw_${i}_${j}`);
+
+    const lower =
+        document.getElementById(`pw_${j}_${i}`);
+
+    if(!upper || !lower){
+        return;
+    }
+
+    const value =
+        parseFraction(upper.value);
+
+    const reciprocal =
+        decimalToFraction(1 / value);
+
+    lower.innerHTML = reciprocal;
+
+    saveState();
+}
+
+function bindCriteriaNameSync(){
+
+    const critCount =
+        parseInt(document.getElementById("critCount").value);
+
+    for(let i=0;i<critCount;i++){
+
+        const input =
+            document.getElementById(`critName${i}`);
+
+        input.addEventListener("input", ()=>{
+
+            const value =
+                input.value.trim() || `Criterion ${i+1}`;
+
+            const row =
+                document.getElementById(`pair_row_${i}`);
+
+            const col =
+                document.getElementById(`pair_col_${i}`);
+
+            if(row) row.textContent = value;
+            if(col) col.textContent = value;
+
+            saveState();
+        });
+    }
+}
+
+function parseFraction(v){
+
+    if(typeof v === "number"){
+        return v;
+    }
+
+    v = String(v).trim();
+
+    if(v.includes("/")){
+
+        const [a,b] = v.split("/");
+
+        return parseFloat(a)/parseFloat(b);
+    }
+
+    return parseFloat(v);
+}
+
+function decimalToFraction(value){
+
+    const tolerance = 1.0E-6;
+
+    if(Number.isInteger(value)){
+        return String(value);
+    }
+
+    let h1=1;
+    let h2=0;
+    let k1=0;
+    let k2=1;
+    let b=value;
+
+    do{
+
+        const a=Math.floor(b);
+
+        let aux=h1;
+        h1=a*h1+h2;
+        h2=aux;
+
+        aux=k1;
+        k1=a*k1+k2;
+        k2=aux;
+
+        b=1/(b-a);
+
+    }while(Math.abs(value-h1/k1)>value*tolerance);
+
+    return `${h1}/${k1}`;
+}
+
+function buildCriteriaMatrix(n){
+
+    const matrix = [];
+
+    for(let i=0;i<n;i++){
+
+        matrix[i] = [];
+
+        for(let j=0;j<n;j++){
+
+            const el =
+                document.getElementById(`pw_${i}_${j}`);
+
+            if(i === j){
+
+                matrix[i][j] = 1;
+
+            }else if(i < j){
+
+                matrix[i][j] =
+                    parseFraction(el.value);
+
+            }else{
+
+                matrix[i][j] =
+                    parseFraction(el.innerText.trim());
+            }
+        }
+    }
+
+    return matrix;
+}
+
+function normalizeMatrix(matrix){
+
+    const n = matrix.length;
+
+    const colSums = Array(n).fill(0);
+
+    for(let j=0;j<n;j++){
+        for(let i=0;i<n;i++){
+            colSums[j]+=matrix[i][j];
+        }
+    }
+
+    const normalized = [];
+
+    for(let i=0;i<n;i++){
+
+        normalized[i]=[];
+
+        for(let j=0;j<n;j++){
+
+            normalized[i][j] =
+                matrix[i][j]/colSums[j];
+        }
+    }
+
+    return {normalized, colSums};
+}
+
+function calculatePriorityVector(normalized){
+
+    const n = normalized.length;
+
+    const pv = [];
+
+    for(let i=0;i<n;i++){
+
+        let sum = 0;
+
+        for(let j=0;j<n;j++){
+            sum += normalized[i][j];
+        }
+
+        pv[i] = sum/n;
+    }
+
+    return pv;
+}
+
+function calculateConsistency(matrix, priorityVector){
+
+    const n = matrix.length;
+
+    const weighted = [];
+
+    for(let i=0;i<n;i++){
+
+        let sum = 0;
+
+        for(let j=0;j<n;j++){
+
+            sum +=
+                matrix[i][j] * priorityVector[j];
+        }
+
+        weighted[i]=sum;
+    }
+
+    const consistencyVector = [];
+
+    for(let i=0;i<n;i++){
+
+        consistencyVector[i] =
+            weighted[i]/priorityVector[i];
+    }
+
+    const lambdaMax =
+        consistencyVector.reduce((a,b)=>a+b,0)/n;
+
+    const CI =
+        (lambdaMax - n)/(n - 1);
+
+    const RI =
+        RI_TABLE[n] || 1.49;
+
+    const CR =
+        RI === 0 ? 0 : CI/RI;
+
+    return {
+        weighted,
+        consistencyVector,
+        lambdaMax,
+        CI,
+        RI,
+        CR
+    };
+}
+
+function normalizeAlternatives(altMatrix){
+
+    const rows = altMatrix.length;
+    const cols = altMatrix[0].length;
+
+    const normalized = [];
+
+    for(let j=0;j<cols;j++){
+
+        const mode =
+            document.getElementById(`critMode${j}`)?.value ||
+            "benefit";
+
+        const columnValues = [];
+
+        for(let i=0;i<rows;i++){
+            columnValues.push(altMatrix[i][j]);
+        }
+
+        if(mode === "benefit"){
+
+            const sum =
+                columnValues.reduce((a,b)=>a+b,0);
+
+            for(let i=0;i<rows;i++){
+
+                if(!normalized[i]){
+                    normalized[i]=[];
+                }
+
+                normalized[i][j] =
+                    altMatrix[i][j]/sum;
+            }
+
+        }else{
+
+            const inverseValues =
+                columnValues.map(v=>1/v);
+
+            const inverseSum =
+                inverseValues.reduce((a,b)=>a+b,0);
+
+            for(let i=0;i<rows;i++){
+
+                if(!normalized[i]){
+                    normalized[i]=[];
+                }
+
+                normalized[i][j] =
+                    (1/altMatrix[i][j])/inverseSum;
+            }
+        }
+    }
+
+    return normalized;
+}
+
+function calculateAHP(){
+
+    const critCount =
+        parseInt(document.getElementById("critCount").value);
+
+    const altCount =
+        parseInt(document.getElementById("altCount").value);
+
+    const criteriaMatrix =
+        buildCriteriaMatrix(critCount);
+
+    const {
+        normalized,
+        colSums
+    } = normalizeMatrix(criteriaMatrix);
+
+    const priorityVector =
+        calculatePriorityVector(normalized);
+
+    const consistency =
+        calculateConsistency(criteriaMatrix, priorityVector);
+
+    renderNormalization(
+        criteriaMatrix,
+        normalized,
+        colSums
+    );
+
+    renderPriorityVector(priorityVector);
+
+    renderConsistency(consistency);
+
+    calculateAlternativeRanking(
+        altCount,
+        critCount,
+        priorityVector
+    );
+}
+
+function renderNormalization(matrix, normalized, colSums){
+
+    let html = `<h3>Original Criteria Matrix</h3>`;
+
+    html += matrixToHTML(matrix);
+
+    html += `<h3>Column Sums</h3>`;
+
+    html += `
+        <div class="formula">
+            ${colSums.map(v=>v.toFixed(4)).join(" | ")}
+        </div>
+    `;
+
+    html += `<h3>Normalized Matrix</h3>`;
+
+    html += matrixToHTML(normalized);
+
+    document.getElementById("normalizationSection").innerHTML =
+        html;
+}
+
+function renderPriorityVector(pv){
+
+    let html = `<table>`;
+
+    html += `
+        <tr>
+            <th>Criterion</th>
+            <th>Priority Weight</th>
+        </tr>
+    `;
+
+    pv.forEach((v,i)=>{
+
+        const critName =
+            document.getElementById(`critName${i}`)?.value ||
+            `Criterion ${i+1}`;
+
+        html += `
+            <tr>
+                <td>${critName}</td>
+                <td>${v.toFixed(4)}</td>
+            </tr>
+        `;
+    });
+
+    html += `</table>`;
+
+    document.getElementById("prioritySection").innerHTML =
+        html;
+}
+
+function renderConsistency(c){
+
+    const ok = c.CR < 0.10;
+
+    const lambdaFormula =
+        c.consistencyVector
+            .map(v=>v.toFixed(4))
+            .join(" + ");
+
+    let html = `
+
+        <div class="result-box">
+
+            <div class="metric">
+                <h3>λmax</h3>
+                <div class="value">
+                    ${c.lambdaMax.toFixed(4)}
+                </div>
+            </div>
+
+            <div class="metric">
+                <h3>CI</h3>
+                <div class="value">
+                    ${c.CI.toFixed(4)}
+                </div>
+            </div>
+
+            <div class="metric">
+                <h3>RI</h3>
+                <div class="value">
+                    ${c.RI.toFixed(4)}
+                </div>
+            </div>
+
+            <div class="metric">
+                <h3>CR</h3>
+                <div class="value ${ok?"good":"bad"}">
+                    ${c.CR.toFixed(4)}
+                </div>
+            </div>
+
+        </div>
+
+        <br>
+
+        <h3>Weighted Vector (A × w)</h3>
+
+        <table>
+            <tr>
+                <th>Criterion</th>
+                <th>Weighted Value</th>
+            </tr>
+
+            ${c.weighted.map((v, i) => {
+
+                const critName =
+                    document.getElementById(`critName${i}`)?.value ||
+                    `Criterion ${i + 1}`;
+
+                return `
+                    <tr>
+                        <td>${critName}</td>
+                        <td>${v.toFixed(4)}</td>
+                    </tr>
+                `;
+            }).join("")}
+
+        </table>
+
+        <br>
+
+        <h3>Consistency Vector ((A × w) / w)</h3>
+
+        <table>
+            <tr>
+                <th>Criterion</th>
+                <th>Consistency Value</th>
+            </tr>
+
+            ${c.consistencyVector.map((v, i) => {
+
+                const critName =
+                    document.getElementById(`critName${i}`)?.value ||
+                    `Criterion ${i + 1}`;
+
+                return `
+                    <tr>
+                        <td>${critName}</td>
+                        <td>${v.toFixed(4)}</td>
+                    </tr>
+                `;
+            }).join("")}
+
+        </table>
+
+        <br>
+
+        <h3>λmax Calculation</h3>
+
+        <div class="formula">
+
+            λmax = average(consistency vector)
+
+            <br><br>
+
+            λmax = (${lambdaFormula}) / ${c.consistencyVector.length}
+
+            <br><br>
+
+            λmax = ${c.lambdaMax.toFixed(4)}
+
+        </div>
+
+        <br>
+
+        <h3>Consistency Index</h3>
+
+        <div class="formula">
+
+            CI = (λmax - n) / (n - 1)
+
+            <br><br>
+
+            CI = (${c.lambdaMax.toFixed(4)} - ${c.consistencyVector.length}) / (${c.consistencyVector.length} - 1)
+
+            <br><br>
+
+            CI = ${c.CI.toFixed(4)}
+
+        </div>
+
+        <br>
+
+        <h3>Consistency Ratio</h3>
+
+        <div class="formula">
+
+            CR = CI / RI
+
+            <br><br>
+
+            CR = ${c.CI.toFixed(4)} / ${c.RI.toFixed(4)}
+
+            <br><br>
+
+            CR = ${c.CR.toFixed(4)}
+
+        </div>
+
+        <br>
+
+        <div class="${ok?"good":"bad"}">
+
+            ${ok
+                ? "Consistency acceptable (CR < 0.10)"
+                : "Consistency NOT acceptable (CR ≥ 0.10)"
+            }
+
+        </div>
+    `;
+
+    document.getElementById("consistencySection").innerHTML =
+        html;
+}
+
+function calculateAlternativeRanking(
+    altCount,
+    critCount,
+    criteriaWeights
+){
+
+    const altMatrix = [];
+
+    for(let i=0;i<altCount;i++){
+
+        altMatrix[i]=[];
+
+        for(let j=0;j<critCount;j++){
+
+            altMatrix[i][j] =
+                parseFloat(
+                    document.getElementById(`val_${i}_${j}`).value
+                );
+        }
+    }
+
+    const normalized =
+        normalizeAlternatives(altMatrix);
+
+    const scores = [];
+
+    for(let i=0;i<altCount;i++){
+
+        let score = 0;
+
+        for(let j=0;j<critCount;j++){
+
+            score +=
+                normalized[i][j] * criteriaWeights[j];
+        }
+
+        scores[i]=score;
+    }
+
+    const ranking = [];
+
+    for(let i=0;i<altCount;i++){
+
+        ranking.push({
+
+            name:
+                document.getElementById(`altName${i}`).value,
+
+            score:scores[i]
+        });
+    }
+
+    ranking.sort((a,b)=>b.score-a.score);
+
+    let html = `<h3>Normalized Alternatives</h3>`;
+
+    html += matrixToHTML(normalized);
+
+    html += `<h3>Final Ranking</h3>`;
+
+    html += `
+        <table>
+
+            <tr>
+                <th>Rank</th>
+                <th>Alternative</th>
+                <th>Score</th>
+            </tr>
+    `;
+
+    ranking.forEach((r,index)=>{
+
+        html += `
+            <tr>
+                <td>${index+1}</td>
+                <td>${r.name}</td>
+                <td>${r.score.toFixed(4)}</td>
+            </tr>
+        `;
+    });
+
+    html += `</table>`;
+
+    document.getElementById("rankingSection").innerHTML =
+        html;
+}
+
+function matrixToHTML(matrix){
+
+    let html = `<table>`;
+
+    for(let i=0;i<matrix.length;i++){
+
+        html += `<tr>`;
+
+        for(let j=0;j<matrix[i].length;j++){
+
+            html += `
+                <td>
+                    ${matrix[i][j].toFixed(4)}
+                </td>
+            `;
+        }
+
+        html += `</tr>`;
+    }
+
+    html += `</table>`;
+
+    return html;
+}
+
+function saveState(){
+
+    const state = {
+
+        altCount:
+            document.getElementById("altCount").value,
+
+        critCount:
+            document.getElementById("critCount").value,
+
+        criteria:[],
+        alternatives:[],
+        pairwise:{}
+    };
+
+    const altCount =
+        parseInt(state.altCount);
+
+    const critCount =
+        parseInt(state.critCount);
+
+    for(let i=0;i<critCount;i++){
+
+        state.criteria.push({
+
+            name:
+                document.getElementById(`critName${i}`)?.value || "",
+
+            mode:
+                document.getElementById(`critMode${i}`)?.value || "benefit"
+        });
+    }
+
+    for(let i=0;i<altCount;i++){
+
+        const alt = {
+
+            name:
+                document.getElementById(`altName${i}`)?.value || "",
+
+            values:[]
+        };
+
+        for(let j=0;j<critCount;j++){
+
+            alt.values.push(
+                document.getElementById(`val_${i}_${j}`)?.value || ""
+            );
+        }
+
+        state.alternatives.push(alt);
+    }
+
+    for(let i=0;i<critCount;i++){
+
+        for(let j=i+1;j<critCount;j++){
+
+            state.pairwise[`pw_${i}_${j}`] =
+                document.getElementById(`pw_${i}_${j}`)?.value;
+        }
+    }
+
+    localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(state)
+    );
+}
+
+function loadState(){
+
+    const raw =
+        localStorage.getItem(STORAGE_KEY);
+
+    if(!raw){
+
+        generateTables();
+
+        return;
+    }
+
+    const state = JSON.parse(raw);
+
+    document.getElementById("altCount").value =
+        state.altCount || 3;
+
+    document.getElementById("critCount").value =
+        state.critCount || 3;
+
+    generateTables();
+
+    state.criteria?.forEach((c,i)=>{
+
+        const nameInput =
+            document.getElementById(`critName${i}`);
+
+        if(nameInput){
+
+            nameInput.value = c.name;
+
+            nameInput.dispatchEvent(
+                new Event("input")
+            );
+        }
+
+        const modeInput =
+            document.getElementById(`critMode${i}`);
+
+        if(modeInput && c.mode){
+
+            modeInput.value = c.mode;
+        }
+    });
+
+    state.alternatives?.forEach((alt,i)=>{
+
+        const altInput =
+            document.getElementById(`altName${i}`);
+
+        if(altInput){
+
+            altInput.value = alt.name;
+        }
+
+        alt.values?.forEach((v,j)=>{
+
+            const valInput =
+                document.getElementById(`val_${i}_${j}`);
+
+            if(valInput){
+
+                valInput.value = v;
+            }
+        });
+    });
+
+    Object.entries(state.pairwise || {})
+        .forEach(([id,value])=>{
+
+            const el =
+                document.getElementById(id);
+
+            if(el){
+
+                el.value = value;
+
+                const parts =
+                    id.replace("pw_","").split("_");
+
+                updateReciprocal(
+                    parseInt(parts[0]),
+                    parseInt(parts[1])
+                );
+            }
+        });
+}
+
+function attachPersistenceListeners(){
+
+    document.addEventListener("input", saveState);
+
+    document.addEventListener("change", saveState);
+}
+
+function clearResults(){
+
+    document.getElementById("normalizationSection").innerHTML = "";
+
+    document.getElementById("prioritySection").innerHTML = "";
+
+    document.getElementById("consistencySection").innerHTML = "";
+
+    document.getElementById("rankingSection").innerHTML = "";
+}
+
+attachPersistenceListeners();
+
+loadState();
+
+</script>
+
+</body>
+</html>
